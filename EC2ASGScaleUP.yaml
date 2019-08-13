@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Tamplate for creatig Auto Scaling Group and Scaling Policy Alarm
+
+Parameters:
+  Creator:
+    Type: String
+    Description: Name of the stack creator
+    Default: ''  
+  EC2ImageId:
+    Type: AWS::EC2::Image::Id
+    Description: Image where EC2 will lonch (its a linux image)
+    Default: ami-0e1b7f1022bdcd0c4
+  EC2InstanceType:
+    Type: String
+    Description: EC2 Instance Type
+    Default: t2.micro
+  Environment:
+    Type: String
+    Description: Project Environment
+    Default: Dev
+  Project: 
+    Type: String
+    Description: Name of the Project
+    Default: "AWS-Subnet-Lession"
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Key Pair name
+    Default: mustaf
+    
+Resources:
+  SimpleConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: !Ref EC2ImageId
+      SecurityGroups: 
+        - !Ref SecurityGroupEnableSSH
+      InstanceType: !Ref EC2InstanceType
+      KeyName: !Ref KeyName
+
+  MustafEC2ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AvailabilityZones:
+        Fn::GetAZs: ''
+      LaunchConfigurationName: !Ref SimpleConfig
+      MinSize: '2'
+      MaxSize: '4'
+      Tags: 
+        - Key: username
+          PropagateAtLaunch: true
+          Value: !Ref Creator
+  
+  MustafEC2ScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref MustafEC2ASG
+      Cooldown: '1'
+      ScalingAdjustment: '1' 
+  
+  MustafCPUAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      ActionsEnabled: true
+      EvaluationPeriods: 1
+      Statistic: Average
+      Threshold: 10
+      AlarmDescription: Alarm when CPU uses more then 10 %
+      Period: 60
+      AlarmActions: 
+        - !Ref MustafEC2ScaleUpPolicy
+      Namespace: AWS/EC2
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: 
+            !Ref MustafEC2ASG
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      MetricName: CPUUtilization
+  
+  SecurityGroupEnableSSH: 
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcId
+      GroupName: !Sub ${Project}-ec2-sg-${Environment}
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+      Tags: 
+        - Key: username
+          Value: !Ref Creator
+   
+Outputs:
+  MustafEC2ASG:
+    Description: Auto Scaling Group
+    Value: !Ref MustafEC2ASG
